@@ -6,6 +6,9 @@ This project is based on the work from [gaussian-splatting](https://github.com/g
 ## Original Readme
 https://gitlab.inria.fr/sibr/sibr_core/-/blob/develop/README.md?ref_type=heads
 
+## Working Project
+/src/projects/MyViewer
+
 ## 필수 요구 사항
 
 - **CUDA Toolkit 11.8**
