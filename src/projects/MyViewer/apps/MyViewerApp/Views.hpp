@@ -1,11 +1,12 @@
 #pragma once
 #include "Scene.hpp"
 #include "projects/MyViewer/renderer/GaussianView.hpp"
-# include <core/renderer/ColoredMeshRenderer.hpp>
+# include <../src/projects/MyViewer/renderer/ColoredMeshRenderer_Pass0.hpp>
 #include "MyStructs.h"
 // Views.hpp
 namespace sibr
 {
+	class RenderTargetRGBW;
 	namespace DF_L
 	{
 		/**
@@ -51,6 +52,8 @@ namespace sibr
 			/** \return a reference to the scene */
 			const std::shared_ptr<sibr::DF_L::BasicIBRScene>& getScene() const { return _scene; }
 
+			void Ready_MeshRendererOutputResource(RenderTargetRGB* rt);
+
 			virtual ~GaussianView() override;
 
 			bool* _dontshow;
@@ -74,9 +77,11 @@ namespace sibr
 			float* opacity_cuda;
 			float* shs_cuda;
 			int* rect_cuda;
+			float* meshRendererOutputColors_cuda = nullptr;
 
 			GLuint imageBuffer;
 			cudaGraphicsResource_t imageBufferCuda;
+			cudaGraphicsResource_t meshRendererOutputImageCuda;
 			GLuint depthBufferRef; // Only copy GLuint number that already Created
 			cudaGraphicsResource_t depthBufferCuda;
 
@@ -103,10 +108,9 @@ namespace sibr
 			PointBasedRenderer::Ptr _pointbasedrenderer;
 			BufferCopyRenderer* _copyRenderer;
 			GaussianSurfaceRenderer* _gaussianRenderer;
-			ColoredMeshRenderer* m_coloredMeshRenderer = nullptr;
+			ColoredMeshRenderer_Pass0* m_coloredMeshRenderer = nullptr;
 
-			size_t mappedSize = 0;
-			float* copiedOutColor = nullptr;
+			size_t imageCudaMappedSize = 0;
 
 		public:
 			LIGHT_DESC lightDesc{};

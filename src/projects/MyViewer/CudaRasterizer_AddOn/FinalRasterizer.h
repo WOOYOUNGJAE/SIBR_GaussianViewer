@@ -9,7 +9,7 @@
 
 #include "../../../../extlibs/CudaRasterizer/CudaRasterizer/third_party/glm/glm/glm.hpp"
 
-#include "../../../../src/projects/gaussianviewer/apps/gaussianViewer/MyStructs.h"
+#include "../../../../src/projects/MyViewer/renderer/MyStructs.h"
 namespace CudaRasterizer
 {
 	namespace DF_L
@@ -24,6 +24,7 @@ namespace CudaRasterizer
 				std::function<char* (size_t)> imageBuffer,
 				const int P, int D, int M,
 				const float* background,
+				const float* bg_precomp,
 				const int width, int height,
 				const float* means3D,
 				const float* shs,
@@ -43,6 +44,11 @@ namespace CudaRasterizer
 				int* rects = nullptr,
 				float* boxmin = nullptr,
 				float* boxmax = nullptr, float* normalsCuda = nullptr, float* out_pixelNormals = nullptr, LIGHT_DESC light = LIGHT_DESC());
+
+			static int Read_GLTexture(
+				const int width, int height,
+				float* out_color, cudaArray** pCudaArr);
+
 		};
 
 		template <typename T>
@@ -145,6 +151,7 @@ namespace CudaRasterizer
 			float* final_T,
 			uint32_t* n_contrib,
 			const float* bg_color,
+			const float* bg_precomp,
 			float* out_color, float3* preprocessedNormals, float* gsNormals, float* out_pixelNormals, LIGHT_DESC light);
 
 

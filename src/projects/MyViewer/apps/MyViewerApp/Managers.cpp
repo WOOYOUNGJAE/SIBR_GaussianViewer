@@ -2,7 +2,8 @@
 #include "Managers.hpp"
 
 #include "projects/MyViewer/apps/MyViewerApp/Views.hpp"
-
+#include "projects/MyViewer/renderer/RenderTargetCustomized.hpp"
+#include "projects/MyViewer/renderer/RenderingModeCustomized.hpp"
 namespace sibr
 {
 	namespace DF_L
@@ -47,26 +48,54 @@ namespace sibr
 				}
 			}
 
-			for (auto& subview : _ibrSubViews) {
-				MultiViewBase::IBRSubView& fView = subview.second;
+			if (_bUseCustomizedRT == false)
+			{
+				for (auto& subview : _ibrSubViews) {
+					MultiViewBase::IBRSubView& fView = subview.second;
 
-				if (fView.view->active()) {
-					auto subInput = !fView.view->isFocused() ? Input() : Input::subInput(input, fView.viewport, false);
+					if (fView.view->active()) {
+						auto subInput = !fView.view->isFocused() ? Input() : Input::subInput(input, fView.viewport, false);
 
-					if (fView.handler) {
-						fView.handler->update(subInput, _deltaTime, fView.viewport);
+						if (fView.handler) {
+							fView.handler->update(subInput, _deltaTime, fView.viewport);
+						}
+
+						fView.cam = fView.updateFunc(fView.view, subInput, fView.viewport, _deltaTime);
+
+						/// If we use the default update func and the integrated handler, 
+						/// we have to use the handler's camera.
+						if (fView.defaultUpdateFunc && fView.handler) {
+							fView.cam = fView.handler->getCamera();
+						}
+
 					}
-
-					fView.cam = fView.updateFunc(fView.view, subInput, fView.viewport, _deltaTime);
-
-					/// If we use the default update func and the integrated handler, 
-					/// we have to use the handler's camera.
-					if (fView.defaultUpdateFunc && fView.handler) {
-						fView.cam = fView.handler->getCamera();
-					}
-
 				}
 			}
+			else
+			{
+				for (auto& subview : _ibrSubViews_CustomizedRT) {
+					MultiViewBase::IBRSubView_CustomizedRT& fView = subview.second;
+
+					if (fView.view->active()) {
+						auto subInput = !fView.view->isFocused() ? Input() : Input::subInput(input, fView.viewport, false);
+
+						if (fView.handler) {
+							fView.handler->update(subInput, _deltaTime, fView.viewport);
+						}
+
+						fView.cam = fView.updateFunc(fView.view, subInput, fView.viewport, _deltaTime);
+
+						/// If we use the default update func and the integrated handler, 
+						/// we have to use the handler's camera.
+						if (fView.defaultUpdateFunc && fView.handler) {
+							fView.cam = fView.handler->getCamera();
+						}
+
+					}
+				}
+			}
+
+
 
 			for (auto& subMultiView : _subMultiViews) {
 				subMultiView.second->onUpdate(input);
@@ -76,18 +105,38 @@ namespace sibr
 		void MultiViewBase::onRender(Window& win)
 		{
 			// Render all views.
-			for (auto& subview : _ibrSubViews) {
-				if (subview.second.view->active()) {
+			if (_bUseCustomizedRT == false)
+			{
+				for (auto& subview : _ibrSubViews) {
+					if (subview.second.view->active()) {
 
-					renderSubView(subview.second);
+						renderSubView(subview.second);
 
-					if (_enableGUI && _showSubViewsGui) {
-						subview.second.view->onGUI();
-						if (subview.second.handler) {
-							subview.second.handler->onGUI("Camera " + subview.first);
+						if (_enableGUI && _showSubViewsGui) {
+							subview.second.view->onGUI();
+							if (subview.second.handler) {
+								subview.second.handler->onGUI("Camera " + subview.first);
+							}
 						}
 					}
 				}
+			}
+			else
+			{
+				for (auto& subview : _ibrSubViews_CustomizedRT) {
+					if (subview.second.view->active()) {
+
+						renderSubView(subview.second);
+
+						if (_enableGUI && _showSubViewsGui) {
+							subview.second.view->onGUI();
+							if (subview.second.handler) {
+								subview.second.handler->onGUI("Camera " + subview.first);
+							}
+						}
+					}
+				}
+				
 			}
 			for (auto& subview : _subViews) {
 				if (subview.second.view->active()) {
@@ -105,8 +154,6 @@ namespace sibr
 			for (auto& subMultiView : _subMultiViews) {
 				subMultiView.second->onRender(win);
 			}
-
-
 		}
 
 		void MultiViewBase::onGui(Window& win)
@@ -131,6 +178,7 @@ namespace sibr
 				res.x() > 0 ? res.x() : (float)_defaultViewResolution.x(),
 				(res.y() > 0 ? res.y() : (float)_defaultViewResolution.y()) + titleBarHeight);
 			RenderTargetRGB::Ptr rtPtr(new RenderTargetRGB((uint)viewport.finalWidth(), (uint)viewport.finalHeight(), SIBR_CLAMP_UVS));
+			//RenderTargetRGB::Ptr rtPtr(new RenderTargetRGB((uint)viewport.finalWidth(), (uint)viewport.finalHeight(), SIBR_CLAMP_UVS));
 			_subViews[title] = { view, rtPtr, viewport, title, flags, updateFunc };
 
 		}
@@ -153,22 +201,58 @@ namespace sibr
 				_ibrSubViews[title] = { view, rtPtr, viewport, title, flags, updateFunc, defaultFuncUsed };
 			}
 			_ibrSubViews[title].shouldUpdateLayout = true;
+		}
 
-			// for CudaRasterizer + MeshRenderer Combined
-			sibr::DF_L::GaussianView* pCastedView = dynamic_cast<sibr::DF_L::GaussianView*>(view.get());
-			if (pCastedView)
+		void MultiViewBase::addIBRSubView_CustomizedRT(const std::string& title, ViewBase::Ptr view,
+			const IBRViewUpdateFunc updateFunc, const Vector2u& res, const ImGuiWindowFlags flags,
+			const bool defaultFuncUsed)
+		{
+			float titleBarHeight = 0.0f;
+			if (_enableGUI) titleBarHeight = ImGui::GetTitleBarHeight();
+			// We have to shift vertically to avoid an overlap with the menu bar.
+			const Viewport viewport(0.0f, titleBarHeight,
+				res.x() > 0 ? res.x() : (float)_defaultViewResolution.x(),
+				(res.y() > 0 ? res.y() : (float)_defaultViewResolution.y()) + titleBarHeight);
+			//auto test = new RenderTargetRGB((uint)viewport.finalWidth(), (uint)viewport.finalHeight(), SIBR_CLAMP_UVS);
+			RenderTargetRGBW::Ptr rtPtr(new RenderTargetRGBW((uint)viewport.finalWidth(), (uint)viewport.finalHeight(), SIBR_CLAMP_UVS));
+			//RenderTargetRGB32F::Ptr rtPtr(new RenderTargetRGB32F((uint)viewport.finalWidth(), (uint)viewport.finalHeight(), SIBR_CLAMP_UVS));
+
+			if (_ibrSubViews_CustomizedRT.count(title) > 0) {
+				const auto handler = _ibrSubViews_CustomizedRT[title].handler;
+				_ibrSubViews_CustomizedRT[title] = { view, rtPtr, viewport, title, flags, updateFunc, defaultFuncUsed };
+				_ibrSubViews_CustomizedRT[title].handler = handler;
+			}
+			else {
+				_ibrSubViews_CustomizedRT[title] = { view, rtPtr, viewport, title, flags, updateFunc, defaultFuncUsed };
+			}
+			_ibrSubViews_CustomizedRT[title].shouldUpdateLayout = true;
+
+			IBR_MainSubViewTitle = title;
+
+			// Init RenderingMode RT
+			const Viewport renderViewport(0.0, 0.0, (float)_ibrSubViews_CustomizedRT[title].rt->w(), (float)_ibrSubViews_CustomizedRT[title].rt->h());
+			MonoRdrModeCustomized* pCastedRM = dynamic_cast<MonoRdrModeCustomized*>(_renderingMode.get());
+			if (pCastedRM)
 			{
-				//pCastedView->Register_DepthBuffer(_renderingMode.get()->rRT().get()->depthRB());
+				pCastedRM->Init_RT(renderViewport);
 			}
 		}
 
-		void MultiViewBase::addIBRSubView(const std::string& title, ViewBase::Ptr view, const Vector2u& res, const ImGuiWindowFlags flags)
+		void MultiViewBase::addIBRSubView(const std::string& title, ViewBase::Ptr view, const Vector2u& res, const ImGuiWindowFlags flags, bool bUseCustomizedRT)
 		{
+			_bUseCustomizedRT = bUseCustomizedRT;
 			const auto updateFunc = [](ViewBase::Ptr& vi, Input& in, const Viewport& vp, const float dt) {
 				vi->onUpdate(in, vp);
 				return InputCamera();
 				};
-			addIBRSubView(title, view, updateFunc, res, flags, true);
+			if (_bUseCustomizedRT == false)
+			{
+				addIBRSubView(title, view, updateFunc, res, flags, true);				
+			}
+			else
+			{
+				addIBRSubView_CustomizedRT(title, view, updateFunc, res, flags, true);
+			}
 		}
 
 		void MultiViewBase::addIBRSubView(const std::string& title, ViewBase::Ptr view, const IBRViewUpdateFunc updateFunc, const Vector2u& res, const ImGuiWindowFlags flags)
@@ -186,6 +270,10 @@ namespace sibr
 			if (_subViews.count(title) > 0) {
 				return _subViews.at(title).view;
 			}
+			if (_ibrSubViews_CustomizedRT.count(title) > 0)
+			{
+				return _ibrSubViews_CustomizedRT.at(title).view;
+			}
 			if (_ibrSubViews.count(title) > 0) {
 				return _ibrSubViews.at(title).view;
 			}
@@ -200,6 +288,10 @@ namespace sibr
 			if (_subViews.count(title) > 0) {
 				return _subViews.at(title).viewport;
 			}
+			else if (_ibrSubViews_CustomizedRT.count(title) > 0)
+			{
+				return _ibrSubViews_CustomizedRT.at(title).viewport;				
+			}
 			else if (_ibrSubViews.count(title) > 0) {
 				return _ibrSubViews.at(title).viewport;
 			}
@@ -211,12 +303,73 @@ namespace sibr
 
 		void MultiViewBase::renderSubView(SubView& subview)
 		{
+			if (!_onPause) {
+				//_renderingMode.get()->rRT()
 
+				const Viewport renderViewport(0.0, 0.0, (float)subview.rt->w(), (float)subview.rt->h());
+				subview.render(_renderingMode, renderViewport);
+
+
+
+				// Offline video dumping, continued. We ignore additional rendering as those often are GUI overlays.
+				if (subview.handler != NULL && (subview.handler->getCamera().needVideoSave() || subview.handler->getCamera().needSave())) {
+
+					ImageRGB frame;
+
+					subview.rt->readBack(frame);
+
+					if (subview.handler->getCamera().needSave()) {
+						frame.save(subview.handler->getCamera().savePath());
+					}
+					_videoFrames.push_back(frame.toOpenCVBGR());
+
+				}
+
+				// Additional rendering.
+				subview.renderFunc(subview.view, renderViewport, std::static_pointer_cast<IRenderTarget>(subview.rt));
+
+				// Render handler if needed.
+				if (subview.handler) {
+					subview.rt->bind();
+					renderViewport.bind();
+					subview.handler->onRender(renderViewport);
+					subview.rt->unbind();
+				}
+
+			}
+
+			if (_enableGUI)
+			{
+				ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+				subview.view->setFocus(showImGuiWindow(subview.view->name(), *subview.rt, subview.flags, subview.viewport, false, subview.shouldUpdateLayout));
+				ImGui::PopStyleVar();
+			}
+			// If we have updated the layout, don't do it next frame.
+			subview.shouldUpdateLayout = false;
+		}
+
+		void MultiViewBase::renderSubView(SubView_CustomizedRT& subview)
+		{
+			ImageRGB testImage;
+			bool isEmpty = true;
 			if (!_onPause) {
 				//_renderingMode.get()->rRT()
 				const Viewport renderViewport(0.0, 0.0, (float)subview.rt->w(), (float)subview.rt->h());
 				subview.render(_renderingMode, renderViewport);
 
+				_renderingMode->destRT2img(testImage);
+				auto a = testImage.toOpenCV();
+				isEmpty = a.empty();
+
+				int size = a.rows * a.cols;
+				unsigned char* floatArray = new unsigned char[size];
+				floatArray[0] = a.at<unsigned char>(0, 0);
+				// cv::Mat 데이터를 float 배열에 복사
+				for (int i = 0; i < a.rows; ++i) {
+					for (int j = 0; j < a.cols; ++j) {
+						floatArray[i * a.cols + j] = a.at<unsigned char>(i, j);
+					}
+				}
 				// Offline video dumping, continued. We ignore additional rendering as those often are GUI overlays.
 				if (subview.handler != NULL && (subview.handler->getCamera().needVideoSave() || subview.handler->getCamera().needSave())) {
 
@@ -260,6 +413,10 @@ namespace sibr
 				viewPtr = _subViews.at(title).view;
 				_subViews.erase(title);
 			}
+			else if (_ibrSubViews_CustomizedRT.count(title) > 0) {
+				viewPtr = _ibrSubViews_CustomizedRT.at(title).view;
+				_ibrSubViews_CustomizedRT.erase(title);
+			}
 			else if (_ibrSubViews.count(title) > 0) {
 				viewPtr = _ibrSubViews.at(title).view;
 				_ibrSubViews.erase(title);
@@ -285,6 +442,11 @@ namespace sibr
 			if (_subViews.count(name) > 0) {
 				_subViews.at(name).handler = cameraHandler;
 			}
+			else if (_ibrSubViews_CustomizedRT.count(name) > 0) {
+				_ibrSubViews_CustomizedRT.at(name).handler = cameraHandler;
+
+				SubView_CustomizedRT& subview = _ibrSubViews_CustomizedRT.at(name);
+			}
 			else if (_ibrSubViews.count(name) > 0) {
 				_ibrSubViews.at(name).handler = cameraHandler;
 
@@ -301,6 +463,9 @@ namespace sibr
 			if (_subViews.count(name) > 0) {
 				_subViews.at(name).renderFunc = renderFunc;
 			}
+			else if (_ibrSubViews_CustomizedRT.count(name) > 0) {
+				_ibrSubViews_CustomizedRT.at(name).renderFunc = renderFunc;
+			}
 			else if (_ibrSubViews.count(name) > 0) {
 				_ibrSubViews.at(name).renderFunc = renderFunc;
 			}
@@ -311,13 +476,17 @@ namespace sibr
 
 		int MultiViewBase::numSubViews() const
 		{
-			return static_cast<int>(_subViews.size() + _ibrSubViews.size() + _subMultiViews.size());
+			size_t numSubViews = _bUseCustomizedRT ? _ibrSubViews_CustomizedRT.size() : _ibrSubViews.size();
+			return static_cast<int>(_subViews.size() + numSubViews + _subMultiViews.size());
 		}
 
 		void MultiViewBase::captureView(const std::string& subviewName, const std::string& path, const std::string& filename)
 		{
 			if (_subViews.count(subviewName)) {
 				captureView(_subViews[subviewName], path, filename);
+			}
+			else if (_ibrSubViews_CustomizedRT.count(subviewName)) {
+				captureView(_ibrSubViews_CustomizedRT[subviewName], path, filename);
 			}
 			else if (_ibrSubViews.count(subviewName)) {
 				captureView(_ibrSubViews[subviewName], path, filename);
@@ -329,6 +498,29 @@ namespace sibr
 
 		void MultiViewBase::captureView(const SubView& view, const std::string& path, const std::string& filename) {
 
+			const uint w = view.rt->w();
+			const uint h = view.rt->h();
+
+			ImageRGB renderingImg(w, h);
+
+			view.rt->readBack(renderingImg);
+
+			std::string finalPath = path + (!path.empty() ? "/" : "");
+			if (!filename.empty()) {
+				finalPath.append(filename);
+			}
+			else {
+				const std::string autoName = view.view->name() + "_" + sibr::timestamp();
+				finalPath.append(autoName + ".png");
+			}
+
+			makeDirectory(path);
+			renderingImg.save(finalPath, true);
+		}
+
+		void MultiViewBase::captureView(const SubView_CustomizedRT& view, const std::string& path,
+			const std::string& filename)
+		{
 			const uint w = view.rt->w();
 			const uint h = view.rt->h();
 
@@ -363,14 +555,29 @@ namespace sibr
 			Vector2f itemRatio = Vector2f(1, 1) / sideCount;
 
 			int vid = 0;
-			for (auto& view : _ibrSubViews) {
-				// Compute position on grid.
-				const int col = vid % sideCount;
-				const int row = vid / sideCount;
-				view.second.viewport = Viewport(usedVP, col * itemRatio[0], row * itemRatio[1], (col + 1) * itemRatio[0], (row + 1) * itemRatio[1]);
-				view.second.shouldUpdateLayout = true;
-				++vid;
+			if (_bUseCustomizedRT == true)
+			{
+				for (auto& view : _ibrSubViews_CustomizedRT) {
+					// Compute position on grid.
+					const int col = vid % sideCount;
+					const int row = vid / sideCount;
+					view.second.viewport = Viewport(usedVP, col * itemRatio[0], row * itemRatio[1], (col + 1) * itemRatio[0], (row + 1) * itemRatio[1]);
+					view.second.shouldUpdateLayout = true;
+					++vid;
+				}
 			}
+			else
+			{
+				for (auto& view : _ibrSubViews) {
+					// Compute position on grid.
+					const int col = vid % sideCount;
+					const int row = vid / sideCount;
+					view.second.viewport = Viewport(usedVP, col * itemRatio[0], row * itemRatio[1], (col + 1) * itemRatio[0], (row + 1) * itemRatio[1]);
+					view.second.shouldUpdateLayout = true;
+					++vid;
+				}
+			}
+				
 			for (auto& view : _subViews) {
 				// Compute position on grid.
 				const int col = vid % sideCount;
@@ -432,6 +639,14 @@ namespace sibr
 			}
 		}
 
+		void MultiViewBase::IBRSubView_CustomizedRT::render(const IRenderingMode::Ptr& rm, const Viewport& renderViewport) const
+		{
+			if (rm) {
+				rm->render(*view, cam, renderViewport, rt.get());
+			}
+		}
+
+
 		MultiViewManager::MultiViewManager(Window& window, bool resize)
 			: _window(window), _fpsCounter(false)
 		{
@@ -445,7 +660,7 @@ namespace sibr
 			}
 
 			/// \todo TODO: support launch arg for stereo mode.
-			renderingMode(IRenderingMode::Ptr(new MonoRdrMode()));
+			renderingMode(IRenderingMode::Ptr(new MonoRdrModeCustomized()));
 
 			//Default view resolution.
 			int w = int(window.size().x() * 0.5f);
@@ -524,14 +739,27 @@ namespace sibr
 
 					if (ImGui::MenuItem("Row layout")) {
 						Vector2f itemSize = win.size().cast<float>();
-						itemSize[0] = std::round(float(itemSize[0]) / float(_subViews.size() + _ibrSubViews.size()));
+						size_t ibrSubViewsSize = _bUseCustomizedRT ? _ibrSubViews_CustomizedRT.size() : _ibrSubViews.size();
+						itemSize[0] = std::round(float(itemSize[0]) / float(_subViews.size() + ibrSubViewsSize));
 						const float verticalShift = ImGui::GetTitleBarHeight();
 						float vid = 0.0f;
-						for (auto& view : _ibrSubViews) {
-							// Compute position on grid.
-							view.second.viewport = Viewport(vid * itemSize[0], verticalShift, (vid + 1.0f) * itemSize[0] - 1.0f, verticalShift + itemSize[1] - 1.0f);
-							view.second.shouldUpdateLayout = true;
-							++vid;
+						if (_bUseCustomizedRT == true)
+						{
+							for (auto& view : _ibrSubViews_CustomizedRT) {
+								// Compute position on grid.
+								view.second.viewport = Viewport(vid * itemSize[0], verticalShift, (vid + 1.0f) * itemSize[0] - 1.0f, verticalShift + itemSize[1] - 1.0f);
+								view.second.shouldUpdateLayout = true;
+								++vid;
+							}
+						}
+						else
+						{
+							for (auto& view : _ibrSubViews) {
+								// Compute position on grid.
+								view.second.viewport = Viewport(vid * itemSize[0], verticalShift, (vid + 1.0f) * itemSize[0] - 1.0f, verticalShift + itemSize[1] - 1.0f);
+								view.second.shouldUpdateLayout = true;
+								++vid;
+							}							
 						}
 						for (auto& view : _subViews) {
 							// Compute position on grid.
@@ -553,10 +781,21 @@ namespace sibr
 							subview.second.view->active(!subview.second.view->active());
 						}
 					}
-					for (auto& subview : _ibrSubViews) {
-						if (ImGui::MenuItem(subview.first.c_str(), "", subview.second.view->active())) {
-							subview.second.view->active(!subview.second.view->active());
-						}
+					if (_bUseCustomizedRT == true)
+					{
+						for (auto& subview : _ibrSubViews_CustomizedRT) {
+							if (ImGui::MenuItem(subview.first.c_str(), "", subview.second.view->active())) {
+								subview.second.view->active(!subview.second.view->active());
+							}
+						}						
+					}
+					else
+					{
+						for (auto& subview : _ibrSubViews) {
+							if (ImGui::MenuItem(subview.first.c_str(), "", subview.second.view->active())) {
+								subview.second.view->active(!subview.second.view->active());
+							}
+						}						
 					}
 					if (ImGui::MenuItem("Metrics", "", _fpsCounter.active())) {
 						_fpsCounter.toggleVisibility();
@@ -574,17 +813,35 @@ namespace sibr
 								}
 							}
 						}
-						for (auto& subview : _ibrSubViews) {
-							const bool isLockedInBackground = subview.second.flags & ImGuiWindowFlags_NoBringToFrontOnFocus;
-							if (ImGui::MenuItem(subview.first.c_str(), "", !isLockedInBackground)) {
-								if (isLockedInBackground) {
-									subview.second.flags &= ~ImGuiWindowFlags_NoBringToFrontOnFocus;
-								}
-								else {
-									subview.second.flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
+						if (_bUseCustomizedRT == true)
+						{
+							for (auto& subview : _ibrSubViews_CustomizedRT) {
+								const bool isLockedInBackground = subview.second.flags & ImGuiWindowFlags_NoBringToFrontOnFocus;
+								if (ImGui::MenuItem(subview.first.c_str(), "", !isLockedInBackground)) {
+									if (isLockedInBackground) {
+										subview.second.flags &= ~ImGuiWindowFlags_NoBringToFrontOnFocus;
+									}
+									else {
+										subview.second.flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
+									}
 								}
 							}
 						}
+						else
+						{
+							for (auto& subview : _ibrSubViews) {
+								const bool isLockedInBackground = subview.second.flags & ImGuiWindowFlags_NoBringToFrontOnFocus;
+								if (ImGui::MenuItem(subview.first.c_str(), "", !isLockedInBackground)) {
+									if (isLockedInBackground) {
+										subview.second.flags &= ~ImGuiWindowFlags_NoBringToFrontOnFocus;
+									}
+									else {
+										subview.second.flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
+									}
+								}
+							}
+						}
+							
 						ImGui::EndMenu();
 					}
 					if (ImGui::MenuItem("Reset Settings to Default", "")) {
@@ -610,10 +867,21 @@ namespace sibr
 							captureView(subview.second, _exportPath);
 						}
 					}
-					for (auto& subview : _ibrSubViews) {
-						if (ImGui::MenuItem(subview.first.c_str())) {
-							captureView(subview.second, _exportPath);
-						}
+					if (_bUseCustomizedRT == true)
+					{
+						for (auto& subview : _ibrSubViews_CustomizedRT) {
+							if (ImGui::MenuItem(subview.first.c_str())) {
+								captureView(subview.second, _exportPath);
+							}
+						}						
+					}
+					else
+					{
+						for (auto& subview : _ibrSubViews) {
+							if (ImGui::MenuItem(subview.first.c_str())) {
+								captureView(subview.second, _exportPath);
+							}
+						}						
 					}
 
 					if (ImGui::MenuItem("Export Video")) {
@@ -642,6 +910,7 @@ namespace sibr
 				ImGui::EndMainMenuBar();
 			}
 		}
+
 
 		void MultiViewManager::toggleGUI()
 		{

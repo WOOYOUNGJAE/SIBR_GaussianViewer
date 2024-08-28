@@ -1,10 +1,14 @@
 #pragma once
 #include <core/view/MultiViewManager.hpp>
 
+//
+
 namespace sibr
 {
 	// Deferred Lighting
 	// Based On Sibr Classes
+	class RenderTargetRGBW;
+	typedef		std::shared_ptr<RenderTargetRGBW>	Ptr_RT_RGBW;
 	namespace DF_L
 	{
 		class MultiViewBase
@@ -81,7 +85,7 @@ namespace sibr
 			*/
 			void	addIBRSubView(const std::string& title, ViewBase::Ptr view,
 				const Vector2u& res = Vector2u(0, 0),
-				const ImGuiWindowFlags flags = 0);
+				const ImGuiWindowFlags flags = 0, bool bUseCustomizedRT = false);
 
 			/**
 			* \brief Register an IBR subview (for instance an ULRView). It will be rendered via a call to onRenderIBR(rt,cam,dst).
@@ -290,6 +294,75 @@ namespace sibr
 				void render(const IRenderingMode::Ptr& rm, const Viewport& renderViewport) const override;
 			};
 
+			struct SubView_CustomizedRT {
+				ViewBase::Ptr view; ///< Pointer to the view.
+				Ptr_RT_RGBW rt; ///< Destination RT.
+				ICameraHandler::Ptr handler; ///< Potential camera handler.
+				AdditionalRenderFunc renderFunc; ///< Optional additonal rendering function.
+				sibr::Viewport viewport; ///< Viewport in the global window.
+				ImGuiWindowFlags flags = 0; ///< ImGui flags.
+				bool shouldUpdateLayout = false; ///< Should the layout be updated at the next frame.
+
+				/// Default constructor.
+				SubView_CustomizedRT() = default;
+
+				/// Destructor.
+				virtual ~SubView_CustomizedRT() = default;
+
+				/** Constructor.
+				 *\param view_ the view
+				 *\param rt_ the destination RT
+				 *\param viewport_ the viewport
+				 *\param name_ the view name
+				 *\param flags_ the ImGui flags
+				 */
+				SubView_CustomizedRT(ViewBase::Ptr view_, Ptr_RT_RGBW rt_, const sibr::Viewport viewport_,
+					const std::string& name_, const ImGuiWindowFlags flags_) :
+					view(view_), rt(rt_), handler(), viewport(viewport_), flags(flags_), shouldUpdateLayout(false)
+				{
+					renderFunc = [](ViewBase::Ptr&, const Viewport&, const IRenderTarget::Ptr&) {};
+					view->setName(name_);
+				}
+
+				/** Render the subview.
+				 *\param rm the rendering mode to use
+				 *\param renderViewport the viewport to use in the destination RT
+				 */
+				virtual void render(const IRenderingMode::Ptr& rm, const Viewport& renderViewport) const = 0;
+			};
+			struct IBRSubView_CustomizedRT final : SubView_CustomizedRT {
+				IBRViewUpdateFunc updateFunc; ///< The update function.
+				sibr::InputCamera cam; ///< The current camera.
+				bool defaultUpdateFunc = true; ///< Was the default update function used.
+
+				/// Default constructor.
+				IBRSubView_CustomizedRT() : SubView_CustomizedRT() {};
+
+				/// Destructor.
+				virtual ~IBRSubView_CustomizedRT() = default;
+
+				/** Constructor.
+				 *\param view_ the view
+				 *\param rt_ the destination RT
+				 *\param viewport_ the viewport
+				 *\param name_ the view name
+				 *\param flags_ the ImGui flags
+				 *\param f_ the update function
+				 *\param defaultUpdateFunc_ was the default update function use (to avoid some collisions)
+				 */
+				IBRSubView_CustomizedRT(ViewBase::Ptr view_, Ptr_RT_RGBW rt_, const sibr::Viewport viewport_,
+					const std::string& name_, const ImGuiWindowFlags flags_, IBRViewUpdateFunc f_, const bool defaultUpdateFunc_) :
+					SubView_CustomizedRT(view_, rt_, viewport_, name_, flags_), updateFunc(f_), defaultUpdateFunc(defaultUpdateFunc_) {
+					cam = sibr::InputCamera();
+				}
+
+				/** Render the subview.
+				 *\param rm the rendering mode to use
+				 *\param renderViewport the viewport to use in the destination RT
+				 */
+				void render(const IRenderingMode::Ptr& rm, const Viewport& renderViewport) const override;
+			};
+
 		protected:
 
 			/** Helper to add an IBR subview.
@@ -308,10 +381,15 @@ namespace sibr
 				const IBRViewUpdateFunc updateFunc, const Vector2u& res,
 				const ImGuiWindowFlags flags, const bool defaultFuncUsed);
 
+			void addIBRSubView_CustomizedRT(const std::string& title, ViewBase::Ptr view,
+				const IBRViewUpdateFunc updateFunc, const Vector2u& res,
+				const ImGuiWindowFlags flags, const bool defaultFuncUsed);
+
 			/** Perform rendering for a given subview.
 			 *\param subview the subview to render
 			 **/
 			void renderSubView(SubView& subview);
+			void renderSubView(SubView_CustomizedRT& subview);
 
 			/** Capture a view as an image on disk.
 			 *\param view the view to capture
@@ -320,10 +398,12 @@ namespace sibr
 			 *\note if the filename is empty, the name of the view is used, with a timestamp appended.
 			 **/
 			static void captureView(const SubView& view, const std::string& path = "./screenshots/", const std::string& filename = "");
+			static void captureView(const SubView_CustomizedRT& view, const std::string& path = "./screenshots/", const std::string& filename = "");
 
 			IRenderingMode::Ptr _renderingMode = nullptr; ///< Rendering mode.
 			std::map<std::string, BasicSubView> _subViews; ///< Regular subviews.
 			std::map<std::string, IBRSubView> _ibrSubViews; ///< IBR subviews.
+			std::map<std::string, IBRSubView_CustomizedRT> _ibrSubViews_CustomizedRT;
 			std::map<std::string, std::shared_ptr<MultiViewBase> > _subMultiViews; ///< Nested multi-views.
 
 			Vector2i _defaultViewResolution; ///< Default view resolution.
@@ -336,6 +416,9 @@ namespace sibr
 			bool _showSubViewsGui = true; ///< Show the GUI of the subviews.
 			bool _onPause = false; ///< Paused interaction and update.
 			bool _enableGUI = true; ///< Should the GUI be enabled.
+			bool _bUseCustomizedRT = false;
+
+			std::string IBR_MainSubViewTitle;
 		};
 
 
@@ -369,6 +452,9 @@ namespace sibr
 			 */
 			void	onGui(Window& win) override;
 
+			RenderTargetRGBW* Get_IBRSubView_CustomizedRT() { return _ibrSubViews_CustomizedRT[IBR_MainSubViewTitle].rt.get(); }
+			RenderTargetRGB* Get_RenderingModeRT() { return _renderingMode.get()->lRT().get(); }
+			void Init_RenderingModeRT();
 		private:
 
 			/** Show/hide the GUI. */

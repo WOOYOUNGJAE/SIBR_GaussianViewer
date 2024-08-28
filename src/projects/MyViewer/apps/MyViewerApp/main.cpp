@@ -250,7 +250,7 @@ int main(int ac, char** av)
 	if (myArgs.rendering_mode == 1) 
 		multiViewManager.renderingMode(IRenderingMode::Ptr(new StereoAnaglyphRdrMode()));
 	
-	multiViewManager.addIBRSubView("Point view", gaussianView, usedResolution, ImGuiWindowFlags_ResizeFromAnySide | ImGuiWindowFlags_NoBringToFrontOnFocus);
+	multiViewManager.addIBRSubView("Point view", gaussianView, usedResolution, ImGuiWindowFlags_ResizeFromAnySide | ImGuiWindowFlags_NoBringToFrontOnFocus, true);
 	multiViewManager.addCameraForView("Point view", generalCamera);
 
 	// Top view
@@ -258,6 +258,7 @@ int main(int ac, char** av)
 	multiViewManager.addSubView("Top view", topView, usedResolution);
 	CHECK_GL_ERROR;
 	topView->active(false);
+	topView->active(true);
 
 	// save images
 	generalCamera->getCameraRecorder().setViewPath(gaussianView, myArgs.dataset_path.get());
@@ -269,6 +270,8 @@ int main(int ac, char** av)
 			exit(0);
 	}
 
+	// MeshRenderer RT -> GaussianViewCudaResource
+	gaussianView->Ready_MeshRendererOutputResource(multiViewManager.Get_RenderingModeRT());
 
 	// Main looooooop.
 	while (window.isOpened()) 

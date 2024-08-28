@@ -11,17 +11,6 @@
 #include <cub/device/device_radix_sort.cuh>
 #define GLM_FORCE_CUDA
 #include "FinalRasterizer.h"
-#include "FinalRasterizer.h"
-#include "FinalRasterizer.h"
-#include "FinalRasterizer.h"
-#include "FinalRasterizer.h"
-#include "FinalRasterizer.h"
-#include "FinalRasterizer.h"
-#include "FinalRasterizer.h"
-#include "FinalRasterizer.h"
-#include "FinalRasterizer.h"
-#include "FinalRasterizer.h"
-#include "FinalRasterizer.h"
 
 #include <glm/glm.hpp>
 
@@ -55,6 +44,8 @@ namespace CudaRasterizer
 		// Gaussian to a 3D covariance matrix in world space. Also takes care
 		// of quaternion normalization.
 		__device__ void computeCov3D(const glm::vec3 scale, float mod, const glm::vec4 rot, float* cov3D);
+
+		__global__ void textureTo1DArray(float* output, cudaTextureObject_t texObj, int width, int height);
 	}
 }
 
@@ -206,6 +197,7 @@ int CudaRasterizer::DF_L::Rasterizer::forward(
 	std::function<char* (size_t)> imageBuffer,
 	const int P, int D, int M,
 	const float* background,
+	const float* bg_precomp,
 	const int width, int height,
 	const float* means3D,
 	const float* shs,
@@ -366,6 +358,7 @@ int CudaRasterizer::DF_L::Rasterizer::forward(
 		imgState.accum_alpha,
 		imgState.n_contrib,
 		background,
+		bg_precomp,
 		out_color,
 		geomState.normal,
 		normalsCuda, out_pixelNormals, light);
@@ -374,6 +367,38 @@ int CudaRasterizer::DF_L::Rasterizer::forward(
 
 	return num_rendered;
 }
+
+int DF_L::Rasterizer::Read_GLTexture(
+	const int width, int height,
+	float* out_color, cudaArray** pCudaArr)
+{
+	cudaResourceDesc resDesc;
+	memset(&resDesc, 0, sizeof(resDesc));
+	resDesc.resType = cudaResourceTypeArray;
+	resDesc.res.array.array = *pCudaArr;
+
+	cudaTextureDesc texDesc;
+	memset(&texDesc, 0, sizeof(texDesc));
+	texDesc.addressMode[0] = cudaAddressModeClamp; // x축 넘어갈 때 clamp 
+	texDesc.addressMode[1] = cudaAddressModeClamp; // y축 넘어갈 때 clamp
+	texDesc.filterMode = cudaFilterModePoint;
+	texDesc.readMode = cudaReadModeElementType;
+	texDesc.normalizedCoords = false;
+
+	cudaTextureObject_t texObj = 0;
+	cudaCreateTextureObject(&texObj, &resDesc, &texDesc, NULL);
+
+
+	dim3 tile_grid((width + BLOCK_X - 1) / BLOCK_X, (height + BLOCK_Y - 1) / BLOCK_Y, 1);	
+	dim3 block(BLOCK_X, BLOCK_Y, 1);
+
+	textureTo1DArray << <tile_grid, block >> > (out_color, texObj, width, height);
+
+	cudaDeviceSynchronize();
+	cudaDestroyTextureObject(texObj);
+	return 0;
+}
+
 
 namespace CudaRasterizer
 {
@@ -530,11 +555,11 @@ namespace CudaRasterizer
 				float* __restrict__ final_T,
 				uint32_t* __restrict__ n_contrib,
 				const float* __restrict__ bg_color,
+				const float* __restrict__ bg_precomp,
 				float* __restrict__ out_color,
 				float3* preprocessedNormals,
 				LIGHT_DESC light)
 		{
-
 			// Identify current tile and associated min/max pixel range.
 			auto block = cg::this_thread_block();
 			uint32_t horizontal_blocks = (W + BLOCK_X - 1) / BLOCK_X;
@@ -640,7 +665,7 @@ namespace CudaRasterizer
 			{
 				final_T[pix_id] = T;
 				n_contrib[pix_id] = last_contributor;
-				//// Visualize Pixel Normals rgb
+				// Visualize Pixel Normals rgb
 				{
 #if CHECK_NORMAL_COLOR
 					curPixNormal = normalize(curPixNormal);
@@ -648,12 +673,47 @@ namespace CudaRasterizer
 					C[1] = curPixNormal.y;
 					C[2] = curPixNormal.z;
 #endif
-					for (int ch = 0; ch < CHANNELS; ch++)
+					uint curPixelIndexR = 0 * H * W + pix_id;
+					uint curPixelIndexG = 1 * H * W + pix_id;
+					uint curPixelIndexB = 2 * H * W + pix_id;
+
+					float curPixelBgColorR = 0.f;
+					float curPixelBgColorG = 0.f;
+					float curPixelBgColorB = 0.f;
+
+
+					// Background is output texture of Mesh Renderer
+					if (bg_precomp != nullptr)
 					{
-						out_color[ch * H * W + pix_id] = C[ch] + T * bg_color[ch];
+						curPixelBgColorR = bg_precomp[curPixelIndexR];
+						curPixelBgColorG = bg_precomp[curPixelIndexG];
+						curPixelBgColorB = bg_precomp[curPixelIndexB];
+						/*if (curPixelBgColorR == 0 && curPixelBgColorG == 0 && curPixelBgColorB == 0)
+						{
+							curPixelBgColorR = 0;
+							curPixelBgColorG = 1;
+							curPixelBgColorB = 0;
+						}*/
+					}
+					else
+					{
+						curPixelBgColorR = bg_color[0];
+						curPixelBgColorG = bg_color[1];
+						curPixelBgColorB = bg_color[2];
 					}
 
-					float3 curPixelColor = { C[0] + T * bg_color[0],C[1] + T * bg_color[1],C[2] + T * bg_color[2], };
+
+					float outColorR = C[0] + T * curPixelBgColorR;
+					float outColorG = C[1] + T * curPixelBgColorG;
+					float outColorB = C[2] + T * curPixelBgColorB;
+
+
+					/*for (int ch = 0; ch < CHANNELS; ch++)
+					{
+						out_color[ch * H * W + pix_id] = C[ch] + T * bg_color[ch];
+					}*/
+
+					float3 curPixelColor = { outColorR , outColorG, outColorB};
 
 					// deferred Rendering Pass 2
 					// apply dir_diffuse color
@@ -665,13 +725,31 @@ namespace CudaRasterizer
 
 					float3 lightDiffuseColor = { light.dir_diffuse.x(), light.dir_diffuse.y(), light.dir_diffuse.z() };
 					float3 finalColor = curPixelColor * lightDiffuseColor * lambertPower + ambientColor;
+					finalColor = curPixelColor;
 
-					out_color[0 * H * W + pix_id] = finalColor.x;
-					out_color[1 * H * W + pix_id] = finalColor.y;
-					out_color[2 * H * W + pix_id] = finalColor.z;
-
+					out_color[curPixelIndexR] = finalColor.x;
+					out_color[curPixelIndexG] = finalColor.y;
+					out_color[curPixelIndexB] = finalColor.z;
 				}
 			}
+		}
+	}
+
+	__global__ void DF_L::textureTo1DArray(float* output, cudaTextureObject_t texObj, int width, int height)
+	{
+		int x = blockIdx.x * blockDim.x + threadIdx.x;
+		int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+		int flipped_y = height - 1 - y; // Texture Coordinate OpenGL to CUDA
+
+		if (x < width && y < height) 
+		{
+			uchar4 texel = tex2D<uchar4>(texObj, x + 0.5f, flipped_y + 0.5f);
+
+			int idx = y * width + x;
+			output[idx] = (float)texel.x / 256;  // Red
+			output[width * height + idx] = (float)texel.y / 256;  // Green
+			output[2 * width * height + idx] = (float)texel.z / 256;  // Blue
 		}
 	}
 
@@ -679,7 +757,7 @@ namespace CudaRasterizer
 
 	void DF_L::render(const dim3 grid, dim3 block, const uint2* ranges, const uint32_t* point_list, int W, int H,
 		const float2* points_xy_image, const float* features, const float4* conic_opacity, float* final_T,
-		uint32_t* n_contrib, const float* bg_color, float* out_color, float3* preprocessedNormals, float* gsNormals, float* out_pixelNormals, LIGHT_DESC light)
+		uint32_t* n_contrib, const float* bg_color, const float* bg_precomp, float* out_color, float3* preprocessedNormals, float* gsNormals, float* out_pixelNormals, LIGHT_DESC light)
 	{
 		// Pass 1
 		DF_L::renderCUDA<NUM_CHANNELS> << <grid, block >> > (
@@ -692,6 +770,7 @@ namespace CudaRasterizer
 			final_T,
 			n_contrib,
 			bg_color,
+			bg_precomp,
 			out_color,
 			preprocessedNormals, light);
 

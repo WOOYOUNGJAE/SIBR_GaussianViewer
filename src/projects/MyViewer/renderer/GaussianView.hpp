@@ -25,7 +25,7 @@
 #include <cuda_gl_interop.h>
 #include <functional>
 # include "GaussianSurfaceRenderer.hpp"
-#include "projects/gaussianviewer/apps/gaussianViewer/MyStructs.h"
+#include "projects/MyViewer/renderer/MyStructs.h"
 
 namespace CudaRasterizer
 {
