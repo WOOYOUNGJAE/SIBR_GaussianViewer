@@ -97,11 +97,45 @@ void sibr::MonoRdrModeCustomized::render(ViewBase& view, const sibr::Camera& eye
 #endif
 }
 
-void sibr::MonoRdrModeCustomized::Init_RT(const sibr::Viewport& viewport)
+void sibr::MonoRdrModeCustomized::Init_RT(const sibr::Viewport& viewport, bool bCreateDepthTexture)
 {
 	int w = (int)viewport.finalWidth();
 	int h = (int)viewport.finalHeight();
 
-	if (!_destRT)// || _destRT->w() != w || _destRT->h() != h)
-		_destRT.reset(new RenderTarget(w, h, SIBR_GPU_LINEAR_SAMPLING));
+	if (_destRT)// || _destRT->w() != w || _destRT->h() != h)
+	{
+		SIBR_ERR;
+		return;
+	}
+
+	_destRT.reset(new RenderTarget(w, h, SIBR_GPU_LINEAR_SAMPLING));
+
+	if (bCreateDepthTexture)
+	{
+		// 이 fbo에 대해
+		//glBindFramebuffer(GL_FRAMEBUFFER, _destRT->fbo());
+		_destRT->bind();
+		glGenTextures(1, &depthTexture);
+		glBindTexture(GL_TEXTURE_2D, depthTexture);
+		//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32, w, h, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+
+		// 기존 Core코드에서 바인딩된 Depth RenderBuffer 해제
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, 0);
+		// 해제된 DepthRenderBuffer 대신 DepthRenderTexture 바인딩
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTexture, 0);
+
+		////00
+		/*glGenBuffers(1, &depthBuffer);
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, depthBuffer);
+		glBufferData(GL_PIXEL_PACK_BUFFER, w * h * sizeof(float), NULL, GL_STATIC_READ);
+		glReadPixels(0, 0, w, h, GL_DEPTH_COMPONENT, GL_FLOAT, 0);*/
+		
+		
+
+		_destRT->unbind();
+
+		//glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		CHECK_GL_ERROR;
+	}
 }

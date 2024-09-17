@@ -270,8 +270,11 @@ int main(int ac, char** av)
 			exit(0);
 	}
 
+
+	multiViewManager.Bind_FBO();
 	// MeshRenderer RT -> GaussianViewCudaResource
-	gaussianView->Ready_MeshRendererOutputResource(multiViewManager.Get_RenderingModeRT());
+	//gaussianView->Ready_MeshRendererOutputResource(multiViewManager.Get_IBRSubView_Texture(), multiViewManager.Get_IBRSubView_DepthBuffer());
+	multiViewManager.UnBind_FBO();
 
 	// Main looooooop.
 	while (window.isOpened()) 

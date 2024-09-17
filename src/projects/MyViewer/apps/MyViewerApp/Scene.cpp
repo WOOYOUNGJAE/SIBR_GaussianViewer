@@ -184,7 +184,30 @@ namespace sibr
 		void BasicIBRScene::Init_SceneMeshes()
 		{
 			auto cube = sibr::Mesh::getTestCube(true);
-			m_sceneMeshes.push_back(cube);
+
+			std::vector<sibr::Vector3f> vertices = {
+			{ +1, +1, +1 }, { -1, +1, +1 }, { -1, -1, +1 },
+			{ +1, -1, +1 }, { +1, +1, -1 }, { -1, +1, -1 },
+			{ -1, -1, -1 }, { +1, -1, -1 }
+			};
+
+			for (auto& iterV : vertices)
+			{
+				iterV.z() -= 2;
+			}
+
+			std::vector<sibr::Vector3u> indices = {
+				{ 0, 1, 2 }, { 0, 2, 3 }, { 7, 4, 0 }, { 7, 0, 3 }, { 4, 5, 1 },
+				{ 4, 1, 0 }, { 5, 6, 2 }, { 5, 2, 1 }, { 3, 2, 6 }, { 3, 6, 7 },
+				{ 6, 5, 4 }, { 6, 4, 7 }
+			};
+
+			sibr::Mesh::Ptr mesh(new sibr::Mesh(true));
+			mesh->vertices(vertices);
+			mesh->triangles(indices);
+			mesh->generateNormals();
+
+			m_sceneMeshes.push_back(mesh);
 		}
 	}
 }

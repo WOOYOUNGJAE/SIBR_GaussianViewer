@@ -52,7 +52,7 @@ namespace sibr
 			/** \return a reference to the scene */
 			const std::shared_ptr<sibr::DF_L::BasicIBRScene>& getScene() const { return _scene; }
 
-			void Ready_MeshRendererOutputResource(RenderTargetRGB* rt);
+			void Ready_MeshRendererOutputResource(GLuint texture, GLuint depthTexture);
 
 			virtual ~GaussianView() override;
 
@@ -77,11 +77,13 @@ namespace sibr
 			float* opacity_cuda;
 			float* shs_cuda;
 			int* rect_cuda;
-			float* meshRendererOutputColors_cuda = nullptr;
+			float* meshRendererRGBArr_cuda = nullptr;
+			float* meshRendererDepthArr_cuda = nullptr;
 
 			GLuint imageBuffer;
 			cudaGraphicsResource_t imageBufferCuda;
 			cudaGraphicsResource_t meshRendererOutputImageCuda;
+			cudaGraphicsResource_t meshRendererDepthCuda;
 			GLuint depthBufferRef; // Only copy GLuint number that already Created
 			cudaGraphicsResource_t depthBufferCuda;
 
@@ -118,7 +120,6 @@ namespace sibr
 			float* normal_cuda = nullptr; // normals in
 			float* pixelNormals_cuda = nullptr; // normals out
 		public:
-			void Register_DepthBuffer(GLuint depthBuffer);
 		};
 
 	}

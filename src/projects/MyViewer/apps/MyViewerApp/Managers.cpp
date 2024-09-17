@@ -178,7 +178,6 @@ namespace sibr
 				res.x() > 0 ? res.x() : (float)_defaultViewResolution.x(),
 				(res.y() > 0 ? res.y() : (float)_defaultViewResolution.y()) + titleBarHeight);
 			RenderTargetRGB::Ptr rtPtr(new RenderTargetRGB((uint)viewport.finalWidth(), (uint)viewport.finalHeight(), SIBR_CLAMP_UVS));
-			//RenderTargetRGB::Ptr rtPtr(new RenderTargetRGB((uint)viewport.finalWidth(), (uint)viewport.finalHeight(), SIBR_CLAMP_UVS));
 			_subViews[title] = { view, rtPtr, viewport, title, flags, updateFunc };
 
 		}
@@ -234,7 +233,7 @@ namespace sibr
 			MonoRdrModeCustomized* pCastedRM = dynamic_cast<MonoRdrModeCustomized*>(_renderingMode.get());
 			if (pCastedRM)
 			{
-				pCastedRM->Init_RT(renderViewport);
+				pCastedRM->Init_RT(renderViewport, true);
 			}
 		}
 
@@ -911,6 +910,39 @@ namespace sibr
 			}
 		}
 
+
+		GLuint MultiViewManager::Get_IBRSubView_Texture()
+		{
+			return _renderingMode->lRT()->texture();
+		}
+
+		GLuint MultiViewManager::Get_IBRSubView_DepthTexture()
+		{
+			MonoRdrModeCustomized* pCastedRenderMode = dynamic_cast<MonoRdrModeCustomized*>(_renderingMode.get());
+			if (pCastedRenderMode == nullptr)
+				return 0;
+
+			return pCastedRenderMode->Get_DepthTexture();
+		}
+
+		GLuint MultiViewManager::Get_IBRSubView_DepthBuffer()
+		{
+			MonoRdrModeCustomized* pCastedRenderMode = dynamic_cast<MonoRdrModeCustomized*>(_renderingMode.get());
+			if (pCastedRenderMode == nullptr)
+				return 0;
+
+			return pCastedRenderMode->Get_DepthBuffer();
+		}
+
+		void MultiViewManager::Bind_FBO()
+		{
+			_renderingMode->lRT()->bind();
+		}
+
+		void MultiViewManager::UnBind_FBO()
+		{
+			_renderingMode->lRT()->unbind();
+		}
 
 		void MultiViewManager::toggleGUI()
 		{

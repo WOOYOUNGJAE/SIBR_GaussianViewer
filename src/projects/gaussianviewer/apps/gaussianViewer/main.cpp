@@ -14,7 +14,7 @@
 #include <core/graphics/Window.hpp>
 #include <core/view/MultiViewManager.hpp>
 #include <core/system/String.hpp>
-//#include "projects/gaussianviewer/renderer/GaussianView.hpp" //
+#include "projects/gaussianviewer/renderer/GaussianView.hpp" 
 
 #include <core/renderer/DepthRenderer.hpp>
 #include <core/raycaster/Raycaster.hpp>
@@ -23,11 +23,6 @@
 #include <boost/filesystem.hpp>
 #include <regex>
 #include <imgui/imgui_internal.h>
-
-#include "DF_L_ParseData.hpp"
-#include "Managers.hpp"
-#include "Views.hpp"
-#include "Scene.hpp"
 
 namespace fs = boost::filesystem;
 
@@ -106,8 +101,7 @@ int main(int ac, char** av)
 	CommandLineArgs::parseMainArgs(ac, av);
 	GaussianAppArgs myArgs;
 	myArgs.displayHelpIfRequired();
-
-
+	
 	if(!myArgs.modelPath.isInit() && myArgs.modelPathShort.isInit())
 		myArgs.modelPath = myArgs.modelPathShort.get();
 	if(!myArgs.dataset_path.isInit() && myArgs.pathShort.isInit())
@@ -139,72 +133,57 @@ int main(int ac, char** av)
 	ImGui::GetCurrentContext()->SettingsHandlers.push_back(ini_handler);
 	window.loadSettings();
 
-	int sh_degree = 3;
-	bool white_background = false;
-
 	std::string cfgLine;
 	std::ifstream cfgFile(myArgs.modelPath.get() + "/cfg_args");
-	if (cfgFile.good())
+	if (!cfgFile.good())
 	{
-		std::getline(cfgFile, cfgLine);
+		SIBR_ERR << "Could not find config file 'cfg_args' at " << myArgs.modelPath.get();
+	}
+	std::getline(cfgFile, cfgLine);
 
-		if (!myArgs.dataset_path.isInit())
-		{
-			auto rng = findArg(cfgLine, "source_path");
-			myArgs.dataset_path = cfgLine.substr(rng.first + 1, rng.second - rng.first - 2);
-		}
-
-		auto rng = findArg(cfgLine, "sh_degree");
-		sh_degree = std::stoi(cfgLine.substr(rng.first, rng.second - rng.first));
-
-		rng = findArg(cfgLine, "white_background");
-		white_background = cfgLine.substr(rng.first, rng.second - rng.first).find("True") != -1;
+	if (!myArgs.dataset_path.isInit())
+	{
+		auto rng = findArg(cfgLine, "source_path");
+		myArgs.dataset_path = cfgLine.substr(rng.first + 1, rng.second - rng.first - 2);
 	}
 
+	auto rng = findArg(cfgLine, "sh_degree");
+	int sh_degree = std::stoi(cfgLine.substr(rng.first, rng.second - rng.first));
 
-	DF_L::BasicIBRScene::SceneOptions myOpts;
+	rng = findArg(cfgLine, "white_background");
+	bool white_background = cfgLine.substr(rng.first, rng.second - rng.first).find("True") != -1;
+
+	BasicIBRScene::SceneOptions myOpts;
 	myOpts.renderTargets = myArgs.loadImages;
 	myOpts.mesh = true;
 	myOpts.images = myArgs.loadImages;
 	myOpts.cameras = true;
 	myOpts.texture = false;
 
-	DF_L::BasicIBRScene::Ptr scene;
+	BasicIBRScene::Ptr scene;
 	try
 	{
-		scene.reset(new DF_L::BasicIBRScene(myArgs, myOpts));
+		scene.reset(new BasicIBRScene(myArgs, myOpts));
 	}
 	catch (...)
 	{
 		SIBR_LOG << "Did not find specified input folder, loading from model path" << std::endl;
 		myArgs.dataset_path = myArgs.modelPath.get();
-		scene.reset(new DF_L::BasicIBRScene(myArgs, myOpts));
+		scene.reset(new BasicIBRScene(myArgs, myOpts));
 	}
 
 	std::string plyfile = myArgs.modelPath.get();
 	if (plyfile.back() != '/')
 		plyfile += "/";
-
-	// Only Ply (with normal)
-	if (dynamic_cast<DF_L::ParseData*>(scene->data().get())->Get_datasetType() == DF_L::Type::GAUSSIAN_WITH_NORMAL)
+	plyfile += "point_cloud";
+	if (!myArgs.iteration.isInit())
 	{
-		plyfile += "OnlyPly/point_cloud.ply";
-		
+		plyfile += "/" + findLargestNumberedSubdirectory(plyfile) + "/point_cloud.ply";
 	}
 	else
 	{
-		plyfile += "point_cloud";
-		if (!myArgs.iteration.isInit())
-		{
-			plyfile += "/" + findLargestNumberedSubdirectory(plyfile) + "/point_cloud.ply";
-		}
-		else
-		{
-			plyfile += "/iteration_" + myArgs.iteration.get() + "/point_cloud.ply";
-		}
+		plyfile += "/iteration_" + myArgs.iteration.get() + "/point_cloud.ply";
 	}
-
-
 
 	// Setup the scene: load the proxy, create the texture arrays.
 	const uint flags = SIBR_GPU_LINEAR_SAMPLING | SIBR_FLIP_TEXTURE;
@@ -233,7 +212,7 @@ int main(int ac, char** av)
 	const unsigned int sceneResHeight = usedResolution.y();
 
 	// Create the ULR view.
-	DF_L::GaussianView::Ptr	gaussianView(new DF_L::GaussianView(scene, sceneResWidth, sceneResHeight, plyfile.c_str(), &messageRead, sh_degree, white_background, !myArgs.noInterop, device));
+	GaussianView::Ptr	gaussianView(new GaussianView(scene, sceneResWidth, sceneResHeight, plyfile.c_str(), &messageRead, sh_degree, white_background, !myArgs.noInterop, device));
 
 	// Raycaster.
 	std::shared_ptr<sibr::Raycaster> raycaster = std::make_shared<sibr::Raycaster>();
@@ -245,7 +224,7 @@ int main(int ac, char** av)
 	generalCamera->setup(scene->cameras()->inputCameras(), Viewport(0, 0, (float)usedResolution.x(), (float)usedResolution.y()), nullptr);
 
 	// Add views to mvm.
-	DF_L::MultiViewManager        multiViewManager(window, false);
+	MultiViewManager        multiViewManager(window, false);
 
 	if (myArgs.rendering_mode == 1) 
 		multiViewManager.renderingMode(IRenderingMode::Ptr(new StereoAnaglyphRdrMode()));
@@ -268,7 +247,6 @@ int main(int ac, char** av)
 		if( !myArgs.noExit )
 			exit(0);
 	}
-
 
 	// Main looooooop.
 	while (window.isOpened()) 

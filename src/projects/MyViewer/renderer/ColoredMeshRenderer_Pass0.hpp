@@ -30,11 +30,25 @@ namespace sibr {
 			/*output*/	IRenderTarget& dst,
 			/*mode*/    sibr::Mesh::RenderMode mode = sibr::Mesh::FillRenderMode,
 			/*BFC*/     bool backFaceCulling = true);
-
+		void makeFBO(int w, int h);
+	public:
+		GLuint ColorTexture() { return colorTexture; }
+		GLuint DepthTexture() { return depthTexture; }
+		GLuint DepthBuffer() { return depthBuffer; }
+		GLuint FBO() { return fbo; }
 	private:
+		GLuint idTexture;
+		GLuint colorTexture;
+		GLuint depthTexture;
+		GLuint depthBuffer;
+		GLuint fbo;
+		int resX, resY;
 
 		GLShader			_shader; ///< Color shader.
 		GLParameter			_paramMVP; ///< MVP uniform.
+		//GLParameter			_paramCamPos;
+		//GLuint clearProg;
+		//GLuint clearShader;
 
 	};
 

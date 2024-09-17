@@ -33,10 +33,19 @@ namespace sibr
 		/** \return the common RT. */
 		virtual const std::unique_ptr<RenderTargetRGB>& rRT() { return _destRT; }
 
-		void Init_RT(const sibr::Viewport& viewport);
+		void Init_RT(const sibr::Viewport& viewport, bool bCreateDepthTexture = false);
 	private:
 		sibr::GLShader							_quadShader; ///< Passthrough shader.
 		std::unique_ptr<RenderTarget>		_destRT; ///< Common destination RT.
+
+	public:
+		GLuint Get_DepthTexture() { return depthTexture; }
+		GLuint Get_DepthBuffer() { return depthBuffer; }
+	private:
+		GLuint depthTexture;
+		GLuint depthTextureForCuda = 0;
+		GLuint depthBuffer = 0;
+
 	};
 
 }

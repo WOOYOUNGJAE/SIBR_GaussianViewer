@@ -453,8 +453,13 @@ namespace sibr
 			void	onGui(Window& win) override;
 
 			RenderTargetRGBW* Get_IBRSubView_CustomizedRT() { return _ibrSubViews_CustomizedRT[IBR_MainSubViewTitle].rt.get(); }
-			RenderTargetRGB* Get_RenderingModeRT() { return _renderingMode.get()->lRT().get(); }
-			void Init_RenderingModeRT();
+			RenderTargetRGB* Get_RenderingModeRT() { return _renderingMode->lRT().get(); }
+			GLuint Get_IBRSubView_Texture();
+			GLuint Get_IBRSubView_DepthTexture();
+			GLuint Get_IBRSubView_DepthBuffer();
+			void Bind_FBO();
+			void UnBind_FBO();
+			//RenderTargetRGBW* Get_RenderingModeCustomizedRT() { return _renderingMode.get()->lRT().get(); }
 		private:
 
 			/** Show/hide the GUI. */

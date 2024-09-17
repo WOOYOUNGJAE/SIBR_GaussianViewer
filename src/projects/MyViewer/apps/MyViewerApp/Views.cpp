@@ -565,6 +565,22 @@ namespace sibr
 		glCreateBuffers(1, &imageBuffer);
 		glNamedBufferStorage(imageBuffer, render_w * render_h * 3 * sizeof(float), nullptr, GL_DYNAMIC_STORAGE_BIT);
 
+		// textures for Copy Meshrenderer -> CudaRasterizer
+		GLuint currentFBO = m_coloredMeshRenderer->FBO();
+		glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&currentFBO);
+		GLuint curColorTexture = m_coloredMeshRenderer->ColorTexture();
+		CUDA_SAFE_CALL(cudaGraphicsGLRegisterImage(&meshRendererOutputImageCuda, curColorTexture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone));
+
+
+		//CUDA_SAFE_CALL(cudaGraphicsGLRegisterImage(&meshRendererDepthCuda, m_coloredMeshRenderer->DepthTexture(), GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone));
+		//CUDA_SAFE_CALL(cudaGraphicsGLRegisterBuffer(&meshRendererDepthCuda, m_coloredMeshRenderer->DepthBuffer(), cudaGraphicsRegisterFlagsNone));
+
+		if (cudaPeekAtLastError() != cudaSuccess)
+		{
+			SIBR_ERR << "A CUDA error occurred in setup:" << cudaGetErrorString(cudaGetLastError()) << ". Please rerun in Debug to find the exact line!";
+		}
+
+
 		if (useInterop)
 		{
 			if (cudaPeekAtLastError() != cudaSuccess)
@@ -613,6 +629,23 @@ namespace sibr
 
 	void sibr::DF_L::GaussianView::onRenderIBR(sibr::IRenderTarget& dst, const sibr::Camera& eye)
 	{
+		bool bUseMeshRenderer = true;
+		if (bUseMeshRenderer)
+		{
+
+			//std::cout << "Cam Pos: " << eye.position() << std::endl;;
+			//Perform ULR rendering, either directly to the destination RT, or to the intermediate RT when poisson blending is enabled.
+			uint w = dst.w();
+			uint h = dst.h();
+			glViewport(0, 0, w, h);
+			dst.clear();
+			for (auto& iterMesh : _scene->Get_Meshes())
+			{
+				m_coloredMeshRenderer->process(*iterMesh, eye, dst, sibr::Mesh::FillRenderMode, false);
+			}
+			//return;
+		}
+
 		if (currMode == "Ellipsoids")
 		{
 			_gaussianRenderer->process(count, *gData, eye, dst, 0.2f);
@@ -623,14 +656,6 @@ namespace sibr
 		}
 		else
 		{
-			//Perform ULR rendering, either directly to the destination RT, or to the intermediate RT when poisson blending is enabled.
-			glViewport(0, 0, dst.w(), dst.h());
-			dst.clear();
-			for (auto& iterMesh : _scene->Get_Meshes())
-			{
-				m_coloredMeshRenderer->process(*iterMesh, eye, dst, sibr::Mesh::FillRenderMode, false);
-			}
-			//return;
 
 			// Convert view and projection to target coordinate system
 			auto view_mat = eye.view();
@@ -649,7 +674,8 @@ namespace sibr
 			CUDA_SAFE_CALL(cudaMemcpy(cam_pos_cuda, &eye.position(), sizeof(float) * 3, cudaMemcpyHostToDevice));
 
 			float* image_cuda = nullptr;
-			cudaArray* cudaArr = nullptr;
+			cudaArray* cudaArr_rgb = nullptr;
+			float* cudaArr_depth= nullptr;
 			if (!_interop_failed)
 			{
 
@@ -662,19 +688,25 @@ namespace sibr
 
 				// Map OpenGL buffer MeshRenderer Output resource for use with CUDA
 				CUDA_SAFE_CALL(cudaGraphicsMapResources(1, &meshRendererOutputImageCuda));
-				//CUDA_SAFE_CALL(cudaGraphicsResourceGetMappedPointer((void**)&image_cuda_MeshRendered, &bytes, meshRendererOutputImageCuda));
-				cudaGraphicsSubResourceGetMappedArray(&cudaArr, meshRendererOutputImageCuda, 0, 0);
+				CUDA_SAFE_CALL(cudaGraphicsSubResourceGetMappedArray(&cudaArr_rgb, meshRendererOutputImageCuda, 0, 0));
+				
+				// depth resource for use with CUDA
+				/*CUDA_SAFE_CALL(cudaGraphicsMapResources(1, &meshRendererDepthCuda));
+				CUDA_SAFE_CALL(cudaGraphicsResourceGetMappedPointer((void**)&cudaArr_depth, &bytes, meshRendererDepthCuda));*/
 
-				if (meshRendererOutputColors_cuda == nullptr)
+				if (meshRendererRGBArr_cuda == nullptr)
 				{
-					cudaMalloc(&meshRendererOutputColors_cuda, imageCudaMappedSize); // for Mesh Renderer Output RGB float Arr					
+					cudaMalloc(&meshRendererRGBArr_cuda, imageCudaMappedSize); // for Mesh Renderer Output RGB float Arr					
 				}
-				CudaRasterizer::DF_L::Rasterizer::Read_GLTexture(_resolution.x(), _resolution.y(), meshRendererOutputColors_cuda, &cudaArr);
+				if (meshRendererDepthArr_cuda == nullptr)
+				{
+					cudaMalloc(&meshRendererDepthArr_cuda, imageCudaMappedSize); // for Mesh Renderer Output RGB float Arr					
+				}
 
-				float* check_float = new float[imageCudaMappedSize / sizeof(float)]{};
-				DEBUG_WATCH_CUDA_MEM(check_float, meshRendererOutputColors_cuda, imageCudaMappedSize);
-				int a = 1;
-				delete[] check_float;
+				// copy DepthTexture -> DepthBuffer
+				//glReadPixels(0, 0, w, h, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+				CudaRasterizer::DF_L::Rasterizer::Read_GLTexture(_resolution.x(), _resolution.y(), meshRendererRGBArr_cuda, &cudaArr_rgb, meshRendererDepthArr_cuda, &cudaArr_depth);
+
 			}
 			else
 			{
@@ -686,13 +718,14 @@ namespace sibr
 			float* boxmin = _cropping ? (float*)&_boxmin : nullptr;
 			float* boxmax = _cropping ? (float*)&_boxmax : nullptr;
 
+			int numRendered = 
 			CudaRasterizer::DF_L::Rasterizer::forward(
 				geomBufferFunc,
 				binningBufferFunc,
 				imgBufferFunc,
 				count, _sh_degree, 16,
 				background_cuda,
-				meshRendererOutputColors_cuda,
+				meshRendererRGBArr_cuda,
 				_resolution.x(), _resolution.y(),
 				pos_cuda,
 				shs_cuda,
@@ -723,6 +756,7 @@ namespace sibr
 				// Unmap OpenGL resource for use with OpenGL
 				CUDA_SAFE_CALL(cudaGraphicsUnmapResources(1, &imageBufferCuda));
 				CUDA_SAFE_CALL(cudaGraphicsUnmapResources(1, &meshRendererOutputImageCuda));
+				//CUDA_SAFE_CALL(cudaGraphicsUnmapResources(1, &meshRendererDepthCuda));
 			}
 			else
 			{
@@ -737,6 +771,7 @@ namespace sibr
 		{
 			SIBR_ERR << "A CUDA error occurred during rendering:" << cudaGetErrorString(cudaGetLastError()) << ". Please rerun in Debug to find the exact line!";
 		}
+		CHECK_GL_ERROR
 	}
 
 	void sibr::DF_L::GaussianView::onUpdate(Input& input)
@@ -826,9 +861,13 @@ namespace sibr
 		}
 	}
 
-	void DF_L::GaussianView::Ready_MeshRendererOutputResource(RenderTargetRGB* rt)
+	void DF_L::GaussianView::Ready_MeshRendererOutputResource(GLuint texture, GLuint depthTexture)
 	{
-		CUDA_SAFE_CALL(cudaGraphicsGLRegisterImage(&meshRendererOutputImageCuda, rt->texture(), GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone));
+		// NO USE
+		GLuint currentFBO;
+		glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&currentFBO);
+		CUDA_SAFE_CALL(cudaGraphicsGLRegisterImage(&meshRendererOutputImageCuda, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone));
+		//CUDA_SAFE_CALL(cudaGraphicsGLRegisterBuffer(&meshRendererDepthCuda, depthTexture, cudaGraphicsRegisterFlagsNone));
 		if (cudaPeekAtLastError() != cudaSuccess)
 		{
 			SIBR_ERR << "A CUDA error occurred in setup:" << cudaGetErrorString(cudaGetLastError()) << ". Please rerun in Debug to find the exact line!";
@@ -838,7 +877,7 @@ namespace sibr
 	sibr::DF_L::GaussianView::~GaussianView()
 	{
 		// Cleanup
-		cudaFree(meshRendererOutputColors_cuda);
+		cudaFree(meshRendererRGBArr_cuda);
 
 		cudaFree(pixelNormals_cuda);
 		cudaFree(normal_cuda);
@@ -859,6 +898,7 @@ namespace sibr
 		{
 			cudaGraphicsUnregisterResource(imageBufferCuda);
 			cudaGraphicsUnregisterResource(meshRendererOutputImageCuda);
+			cudaGraphicsUnregisterResource(meshRendererDepthCuda);
 		}
 		else
 		{
@@ -874,12 +914,6 @@ namespace sibr
 			cudaFree(imgPtr);
 
 		delete _copyRenderer;
-	}
-
-	void DF_L::GaussianView::Register_DepthBuffer(GLuint depthBuffer)
-	{
-		depthBufferRef = depthBuffer;
-		auto a = cudaGraphicsGLRegisterBuffer(&depthBufferCuda, depthBufferRef, cudaGraphicsRegisterFlagsWriteDiscard);
 	}
 }
 
