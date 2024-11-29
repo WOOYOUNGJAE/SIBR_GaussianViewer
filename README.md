@@ -16,21 +16,22 @@ https://gitlab.inria.fr/sibr/sibr_core/-/blob/develop/README.md?ref_type=heads
 
 ## How To Build
   
-1. Copy_AddOn_To_extlibs.bat 실행
-
-2. CMake로 VS 2019 Build Tool을 지정한 후 솔루션과 프로젝트 생성
+1. CMake로 VS 2019 Build Tool을 지정한 후 솔루션과 프로젝트 생성 (Configure 버튼)
    - **Where is the source code**: `C:/Users/../SIBR_GaussianViewer`
    - **Where to build the binaries**: `C:/Users/../SIBR_GaussianViewer/build`
+2. Copy_AddOn_To_extlibs.bat 실행
+
+3. CMake의 Configure 한번 더 실행, Generate -> Open Project
  
-3. `build/sibr_projects.sln` 실행
+4. `build/sibr_projects.sln` 실행
    
-4. `ALL_BUILD` 프로젝트를 지정한 후 빌드
+5. `ALL_BUILD` 프로젝트를 지정한 후 빌드
 
-5. `INSTALL` 프로젝트를 지정한 후 빌드
+6. `INSTALL` 프로젝트를 지정한 후 빌드
 
-6. `sibr_MyViewer_app` 프로젝트를 Set as Startup Project로 지정한 후 빌드
+7. `sibr_MyViewer_app` 프로젝트를 Set as Startup Project로 지정한 후 빌드
 
-7. VS에서 디버깅 할 경우:
+8. VS에서 디버깅 할 경우:
    - `sibr_MyViewer_app → properties → Configuration Properties → Debugging → Command Arguments`에 `-m ..\..\Assets` 추가
 ## 기타
 src/projects/MyViewer/apps/MyViewerApp/MyInclude.h 의 USE_MESHRENDERER 로 Deferred Rendering 여부 결정
