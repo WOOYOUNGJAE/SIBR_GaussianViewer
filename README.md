@@ -32,3 +32,5 @@ https://gitlab.inria.fr/sibr/sibr_core/-/blob/develop/README.md?ref_type=heads
 
 7. VS에서 디버깅 할 경우:
    - `sibr_MyViewer_app → properties → Configuration Properties → Debugging → Command Arguments`에 `-m ..\..\Assets` 추가
+## 기타
+src/projects/MyViewer/apps/MyViewerApp/MyInclude.h 의 USE_MESHRENDERER 로 Deferred Rendering 여부 결정
