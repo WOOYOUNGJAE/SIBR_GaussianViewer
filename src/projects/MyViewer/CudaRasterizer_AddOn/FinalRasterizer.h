@@ -47,7 +47,7 @@ namespace CudaRasterizer
 
 			static int Read_GLTexture(
 				const int width, int height,
-				float* out_color, cudaArray** pCudaArr);
+				float* out_color, cudaArray** pCudaRGBArr, float* out_depth, float** pCudaDepthArr);
 
 		};
 

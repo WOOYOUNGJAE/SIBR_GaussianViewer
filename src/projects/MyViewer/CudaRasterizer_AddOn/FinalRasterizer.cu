@@ -370,12 +370,12 @@ int CudaRasterizer::DF_L::Rasterizer::forward(
 
 int DF_L::Rasterizer::Read_GLTexture(
 	const int width, int height,
-	float* out_color, cudaArray** pCudaArr)
+	float* out_color, cudaArray** pCudaRGBArr, float* out_depth, float** pCudaDepthArr)
 {
 	cudaResourceDesc resDesc;
 	memset(&resDesc, 0, sizeof(resDesc));
 	resDesc.resType = cudaResourceTypeArray;
-	resDesc.res.array.array = *pCudaArr;
+	resDesc.res.array.array = *pCudaRGBArr;
 
 	cudaTextureDesc texDesc;
 	memset(&texDesc, 0, sizeof(texDesc));
@@ -459,7 +459,7 @@ namespace CudaRasterizer
 				p_orig.x > boxmax.x || p_orig.y > boxmax.y || p_orig.z > boxmax.z)
 				return;
 
-			float4 p_hom = transformPoint4x4(p_orig, projmatrix);
+			float4 p_hom = transformPoint4x4(p_orig, projmatrix); // projmatrix = view x proj
 			float p_w = 1.0f / (p_hom.w + 0.0000001f);
 			float3 p_proj = { p_hom.x * p_w, p_hom.y * p_w, p_hom.z * p_w };
 
@@ -534,7 +534,6 @@ namespace CudaRasterizer
 			tiles_touched[idx] = (rect_max.y - rect_min.y) * (rect_max.x - rect_min.x);
 
 			// Store normals
-			// TODO : normal projection º¯È¯
 			pOutNormals[idx].x = gaussianNormalsCuda[idx * 3 + 0];
 			pOutNormals[idx].y = gaussianNormalsCuda[idx * 3 + 1];
 			pOutNormals[idx].z = gaussianNormalsCuda[idx * 3 + 2];
