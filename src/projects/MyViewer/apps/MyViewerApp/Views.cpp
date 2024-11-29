@@ -7,6 +7,7 @@
 #include <imgui_internal.h>
 
 #pragma region ReDefine
+#include "MyInclude.h"
 #include "Scene.hpp"
 #include "../../renderer/GaussianSurfaceRenderer.hpp"
 #include "projects/MyViewer/renderer/RenderTargetCustomized.hpp"
@@ -564,7 +565,7 @@ namespace sibr
 		// Create GL buffer ready for CUDA/GL interop
 		glCreateBuffers(1, &imageBuffer);
 		glNamedBufferStorage(imageBuffer, render_w * render_h * 3 * sizeof(float), nullptr, GL_DYNAMIC_STORAGE_BIT);
-
+		
 		// textures for Copy Meshrenderer -> CudaRasterizer
 		GLuint currentFBO = m_coloredMeshRenderer->FBO();
 		glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&currentFBO);
@@ -629,8 +630,7 @@ namespace sibr
 
 	void sibr::DF_L::GaussianView::onRenderIBR(sibr::IRenderTarget& dst, const sibr::Camera& eye)
 	{
-		bool bUseMeshRenderer = true;
-		if (bUseMeshRenderer)
+		if (USE_MESHRENDERER)
 		{
 
 			//std::cout << "Cam Pos: " << eye.position() << std::endl;;
