@@ -23,10 +23,10 @@ https://gitlab.inria.fr/sibr/sibr_core/-/blob/develop/README.md?ref_type=heads
 2. Copy_AddOn_To_extlibs.bat 실행
 
 3. `build/sibr_projects.sln` 실행 후, `extlibs/CudaRasterizer` 프로젝트에 다음 파일들을 추가 (Add Existing Item):
-   - `FinalRasterizer.cu`
-   - `FinalRasterizer.h`
-   - `helper_math.h`
-   - `My_Utils.h`
+   - `SIBR_GaussianViewer/extlibs/CudaRasterizer/CudaRasterizer/cuda_rasterizerFinalRasterizer.cu`
+   - `SIBR_GaussianViewer/extlibs/CudaRasterizer/CudaRasterizer/cuda_rasterizerFinalRasterizerFinalRasterizer.h`
+   - `SIBR_GaussianViewer/extlibs/CudaRasterizer/CudaRasterizer/cuda_rasterizerFinalRasterizerhelper_math.h`
+   - `SIBR_GaussianViewer/extlibs/CudaRasterizer/CudaRasterizer/cuda_rasterizerFinalRasterizerMy_Utils.h`
    
 4. `ALL_BUILD` 프로젝트를 지정한 후 빌드
 

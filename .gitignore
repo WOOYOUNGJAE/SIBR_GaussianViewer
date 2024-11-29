@@ -47,6 +47,7 @@ tags
 
 # for GS_DeferredLighting
 !src/projects/gaussianviewer
+!src/projects/basic
 
 # for MyViewer
 !src/projects/MyViewer
