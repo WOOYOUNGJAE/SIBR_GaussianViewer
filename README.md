@@ -32,7 +32,7 @@ https://gitlab.inria.fr/sibr/sibr_core/-/blob/develop/README.md?ref_type=heads
 
 5. `INSTALL` 프로젝트를 지정한 후 빌드
 
-6. `sibr_MyViewer_app` 프로젝트를 지정한 후 빌드
+6. `sibr_MyViewer_app` 프로젝트를 Set as Startup Project로 지정한 후 빌드
 
 7. VS에서 디버깅 할 경우:
    - `sibr_MyViewer_app → properties → Configuration Properties → Debugging → Command Arguments`에 `-m ..\..\Assets` 추가
