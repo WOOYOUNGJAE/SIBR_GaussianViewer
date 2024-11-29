@@ -15,13 +15,13 @@ https://gitlab.inria.fr/sibr/sibr_core/-/blob/develop/README.md?ref_type=heads
 - **Visual Studio 2019 Build Tools** - IDE도 2019로 통일하는 것을 강력히 권장
 
 ## How To Build
+  
+1. Copy_AddOn_To_extlibs.bat 실행
 
-1. CMake로 VS 2019 Build Tool을 지정한 후 솔루션과 프로젝트 생성
+2. CMake로 VS 2019 Build Tool을 지정한 후 솔루션과 프로젝트 생성
    - **Where is the source code**: `C:/Users/../SIBR_GaussianViewer`
    - **Where to build the binaries**: `C:/Users/../SIBR_GaussianViewer/build`
-   
-2. Copy_AddOn_To_extlibs.bat 실행
-
+ 
 3. `build/sibr_projects.sln` 실행
    
 4. `ALL_BUILD` 프로젝트를 지정한 후 빌드
