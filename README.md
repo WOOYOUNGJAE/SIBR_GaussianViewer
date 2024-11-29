@@ -12,7 +12,7 @@ https://gitlab.inria.fr/sibr/sibr_core/-/blob/develop/README.md?ref_type=heads
 ## 필수 요구 사항
 
 - **CUDA Toolkit 11.8**
-- **Visual Studio 2019 Build Tools** - IDE도 2019로 통일하는 것을 권장
+- **Visual Studio 2019 Build Tools** - IDE도 2019로 통일하는 것을 강력히 권장
 
 ## How To Build
 
@@ -22,11 +22,7 @@ https://gitlab.inria.fr/sibr/sibr_core/-/blob/develop/README.md?ref_type=heads
    
 2. Copy_AddOn_To_extlibs.bat 실행
 
-3. `build/sibr_projects.sln` 실행 후, `extlibs/CudaRasterizer` 프로젝트에 다음 파일들을 추가 (Add Existing Item):
-   - `SIBR_GaussianViewer/extlibs/CudaRasterizer/CudaRasterizer/cuda_rasterizerFinalRasterizer.cu`
-   - `SIBR_GaussianViewer/extlibs/CudaRasterizer/CudaRasterizer/cuda_rasterizerFinalRasterizerFinalRasterizer.h`
-   - `SIBR_GaussianViewer/extlibs/CudaRasterizer/CudaRasterizer/cuda_rasterizerFinalRasterizerhelper_math.h`
-   - `SIBR_GaussianViewer/extlibs/CudaRasterizer/CudaRasterizer/cuda_rasterizerFinalRasterizerMy_Utils.h`
+3. `build/sibr_projects.sln` 실행
    
 4. `ALL_BUILD` 프로젝트를 지정한 후 빌드
 
@@ -36,13 +32,3 @@ https://gitlab.inria.fr/sibr/sibr_core/-/blob/develop/README.md?ref_type=heads
 
 7. VS에서 디버깅 할 경우:
    - `sibr_MyViewer_app → properties → Configuration Properties → Debugging → Command Arguments`에 `-m ..\..\Assets` 추가
-
-## Assets 경로
-Root
-├── Assets
-
-│   └──  OnlyPly # 이 안에 cameras.json과 ply, ply는 point_cloud.ply 단 한 개로 고정 (24.08 기준)
-
-│…
-
-└── src
